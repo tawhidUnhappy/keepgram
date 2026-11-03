@@ -25,7 +25,8 @@ from textual.widgets import Label, ProgressBar
 from keepgram import media
 from keepgram.media import human
 from keepgram.meter import duration
-from keepgram.ui.widgets import KeyBar, TopBar, WrapLog
+from keepgram.ui import touch
+from keepgram.ui.widgets import KeyBar, KeyboardBox, TopBar, WrapLog
 
 
 @dataclass
@@ -86,7 +87,7 @@ class TaskScreen(Screen[Outcome]):
             yield Label(id="step")
             with Horizontal(id="bar-row"):
                 yield Label(id="bar-label")
-                yield ProgressBar(show_eta=False, id="bar")
+                yield ProgressBar(show_eta=False, id="file-bar")
                 yield Label(id="bar-detail")
             # The whole job (meter.Meter): how far, how fast lately, when it'll be done.
             with Horizontal(id="all-row"):
@@ -94,6 +95,8 @@ class TaskScreen(Screen[Outcome]):
                 yield ProgressBar(show_eta=False, show_percentage=True, id="all-bar")
             yield Label(id="all-detail")
             yield WrapLog(max_lines=2000, id="output")
+            if touch.PHONE:
+                yield KeyboardBox()
         yield KeyBar()
 
     def on_mount(self) -> None:
@@ -146,7 +149,7 @@ class TaskScreen(Screen[Outcome]):
         if self.bar:
             label, done, total = self.bar
             self.query_one("#bar-label", Label).update(label)
-            self.query_one("#bar", ProgressBar).update(total=max(total, 1), progress=done)
+            self.query_one("#file-bar", ProgressBar).update(total=max(total, 1), progress=done)
             self.query_one("#bar-detail", Label).update(f"{human(done)} / {human(total)}")
 
     async def _run(self) -> None:

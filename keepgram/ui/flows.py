@@ -42,22 +42,39 @@ def _home_info(app) -> None:
 # -- the account -------------------------------------------------------------------
 
 
+def _connecting(app) -> asyncio.Lock:
+    """One connect at a time. The start-up connect and a menu item chosen before
+    it was done (seconds, on a phone's mobile data) each opened this keepgram's
+    copy of the login: two clients on one file, which lock each other out (see
+    telegram.make_client)."""
+    lock = getattr(app, "connect_lock", None)
+    if lock is None:
+        lock = app.connect_lock = asyncio.Lock()
+    return lock
+
+
 async def quiet_connect(app) -> None:
     """At start: connect with the saved login if there is one, asking nothing."""
-    if not app.cfg.get("api_id") or not paths.SESSION.is_file():
-        return
-    client = telegram.make_client(app.cfg)
-    await client.connect()
-    if await client.is_user_authorized():
-        app.client, app.me = client, await client.get_me()
-        await limits.learn(client, app.cfg)
-        _home_info(app)
-    else:
-        await client.disconnect()
+    async with _connecting(app):
+        if app.client is not None or not app.cfg.get("api_id") or not paths.SESSION.is_file():
+            return
+        client = telegram.make_client(app.cfg)
+        await client.connect()
+        if await client.is_user_authorized():
+            app.client, app.me = client, await client.get_me()
+            await limits.learn(client, app.cfg)
+            _home_info(app)
+        else:
+            await client.disconnect()
 
 
 async def ensure_client(app):
     """The connected client - logging in first (in dialogs) if needed."""
+    async with _connecting(app):
+        return await _connect_or_log_in(app)
+
+
+async def _connect_or_log_in(app):
     if app.client is not None and app.client.is_connected():
         return app.client
     cfg = app.cfg
@@ -89,7 +106,7 @@ async def ensure_client(app):
 
         try:
             await client.start(
-                phone=lambda: ask("Log in: phone number", "With the country code, like +8801…"),
+                phone=lambda: ask("Log in: phone number", "With the country code, like +1 202 555 0123"),
                 code_callback=lambda: ask("Log in: the code", "Telegram just sent it to your Telegram app."),
                 password=lambda: ask("Log in: your cloud password", "Two-step verification is on.", True),
             )

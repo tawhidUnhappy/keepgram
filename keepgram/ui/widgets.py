@@ -16,6 +16,8 @@ from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Input, OptionList, Static
 
+from keepgram.ui import touch
+
 PATH_SEPARATOR = "  ›  "
 
 
@@ -182,6 +184,26 @@ class SafeOptionList(OptionList):
 
 class TextInput(Input):
     BINDINGS = [Binding("enter", "submit", "OK")]
+
+
+class KeyboardBox(Static):
+    """Looks like a text box, under the log on a phone: a tap on it brings the
+    on-screen keyboard back (touch.py says how). Read-only - it never takes
+    the focus or any typing, so keys still go to the screen (Ctrl+C stops)."""
+
+    DEFAULT_CSS = """
+    KeyboardBox { height: 1; padding: 0 1; background: $boost; color: $text-muted; }
+    """
+    HINT = "Tap here for the keyboard"
+
+    def __init__(self) -> None:
+        super().__init__(self.HINT)
+
+    def on_click(self, event: events.Click) -> None:
+        event.stop()
+        touch.keyboard_please(self.app)
+        self.update("Keyboard coming up - tap again if it doesn't")
+        self.set_timer(touch.FREE_FOR, lambda: self.update(self.HINT))
 
 
 class WrapLog(VerticalScroll):

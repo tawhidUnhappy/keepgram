@@ -13,7 +13,7 @@ import logging
 from textual.app import App
 
 from keepgram import config
-from keepgram.ui import look
+from keepgram.ui import look, touch
 from keepgram.ui.dialogs import Result
 from keepgram.ui.screens import HomeScreen
 from keepgram.ui.task import TaskScreen
@@ -35,19 +35,24 @@ SafeTable > .datatable--header { background: $background; color: $primary; text-
 Result, Choice, Ask { align: center middle; background: $background 60%; }
 .dialog-title { text-style: bold; margin-bottom: 1; color: $primary; }
 .note { color: $text-muted; margin-bottom: 1; }
-.note-scroll { height: auto; max-height: 16; color: $text-muted; margin-bottom: 1; background: $surface;
+.hint { color: $text-muted; }
+/* As tall as they need: a short window takes rows off them, not the card (dialogs.Card). */
+.note-scroll { height: auto; color: $text-muted; margin-bottom: 1; background: $surface;
                scrollbar-size-vertical: 1; }
-#result-text { height: auto; max-height: 20; background: $surface; scrollbar-size-vertical: 1; }
+#result-text { height: auto; background: $surface; scrollbar-size-vertical: 1; }
 .dialog SafeOptionList { height: auto; border: none; padding: 0; background: $surface; }
 .dialog Input { margin-top: 1; }
 .dialog Button { margin-top: 1; }
 
 .task { height: 1fr; padding: 0 2; margin: 0 1; background: $surface; }
-#step { margin-bottom: 1; }
+#step { margin-bottom: 1; width: 100%; text-wrap: nowrap; text-overflow: ellipsis; }
 #bar-row { height: 1; }
 #bar-label { width: auto; max-width: 45%; margin-right: 2; color: $text-muted; text-wrap: nowrap;
              text-overflow: ellipsis; }
-#bar { width: 1fr; min-width: 8; }
+/* Not "#bar": that is the id of the strip inside every Textual ProgressBar, and a
+   min-width meant for the whole bar pushed its % under the size beside it. */
+#file-bar { width: 1fr; min-width: 8; }
+#file-bar Bar, #all-bar Bar { width: 1fr; }
 #bar-detail { width: auto; color: $text-muted; margin-left: 1; text-wrap: nowrap; }
 #all-row { height: 1; margin-top: 1; }
 #all-label { width: auto; margin-right: 2; color: $primary; text-style: bold; }
@@ -55,6 +60,20 @@ Result, Choice, Ask { align: center middle; background: $background 60%; }
 #all-detail { color: $text-muted; }
 #output { height: 1fr; min-height: 3; margin: 1 0; color: $text-muted; background: $background;
           overflow-x: hidden; scrollbar-size-vertical: 1; padding: 0 1; }
+
+/* A phone: narrow held upright, short with its keyboard up or turned sideways. The
+   spacing goes, so the log and the notes get the rows. */
+Screen.-narrow .dialog { max-width: 100%; padding: 1 1; }
+Screen.-narrow .task { padding: 0 1; margin: 0; }
+Screen.-narrow #bar-label { max-width: 35%; }
+Screen.-short TopBar { margin-bottom: 0; }
+Screen.-short .dialog { padding: 0 1; }
+Screen.-short .dialog-title { margin-bottom: 0; }
+Screen.-short .dialog Input { margin-top: 0; }
+Screen.-short .dialog Button { margin-top: 0; height: 1; border: none; }
+Screen.-short #step { margin-bottom: 0; }
+Screen.-short #all-row { margin-top: 0; }
+Screen.-short #output { margin: 0; }
 """
 
 
@@ -74,6 +93,10 @@ class KeepgramApp(App):
     CSS = CSS
     TITLE = "keepgram"
     ENABLE_COMMAND_PALETTE = False
+    # The classes the stylesheet's phone rules go by: a phone held upright is
+    # under 70 columns; with its keyboard up, or sideways, it's under 28 rows.
+    HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (70, "-wide")]
+    VERTICAL_BREAKPOINTS = [(0, "-short"), (28, "-tall")]
 
     def __init__(self) -> None:
         super().__init__()
@@ -87,6 +110,10 @@ class KeepgramApp(App):
 
     def on_mount(self) -> None:
         normal_tasks()
+        if touch.PHONE:
+            # Mouse or keyboard, whichever the moment wants (touch.py): checked
+            # often, so it never matters which way a screen or a box went away.
+            self.set_interval(0.25, lambda: touch.sync(self))
         self.push_screen(HomeScreen())
 
     def start_flow(self, coro) -> None:

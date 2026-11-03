@@ -161,13 +161,20 @@ keepgram out, open Telegram → Settings → Devices and end its session.
 | quit | `q` |
 | stop a running job | **Ctrl+C**: hold **Volume Down** and tap `c` (or `CTRL`, then `c`, on the extra-keys bar). Press it again to stop at once. |
 | make the text smaller or bigger | pinch the screen with two fingers |
-| show the keyboard again | tap the screen, or swipe the extra-keys bar |
+| show the keyboard again | where keepgram waits for you to type (the login, a folder path): **tap anywhere**. While a job runs: tap **Tap here for the keyboard** under its log |
 
 The menus fit a phone held upright, but **turning it sideways** gives the lists and progress bars
 more room.
 
-The keyboard can cover the bottom of the screen. Swipe the keyboard away to see the whole menu,
-and tap the screen to bring it back.
+The keyboard can cover the bottom of the screen; the menus make room for it. A long note or log
+gives up rows, and the title and the answers stay on screen. You can swipe the keyboard away to
+see more.
+
+In the lists, taps choose things, so a tap doesn't bring the keyboard back there. Termux opens
+its keyboard on a tap only while the program in it isn't using taps. keepgram stops using them
+wherever you need the keyboard: while a box waits for your typing, and for a moment after you
+tap the keyboard box under a job's log. In the lists you don't need the keyboard: tap and
+double-tap.
 
 ## Uploading folders from your phone
 
@@ -281,3 +288,4 @@ To remove Termux as well, uninstall it like any other app.
 | `setting up .venv` takes very long | It's building `cryptg` after step 6. On a slow phone that can take 10 minutes or more; let it finish. |
 | The menu looks broken or cut off | Turn the phone sideways, or pinch to make the text smaller. |
 | The login code never arrives | It's sent to your Telegram app, not by SMS. Check Telegram on this phone or another device. |
+| Back from Telegram with the code, the keyboard is gone | Tap anywhere on the screen. While keepgram waits for your typing, a tap brings the keyboard back. |
