@@ -54,6 +54,9 @@ git clone https://github.com/tawhidUnhappy/keepgram.git
 cd keepgram && ./run.sh
 ```
 
+Step by step, with logging in, touch keys, phone folder paths and keeping it running with the
+screen off: [docs/android-termux.md](docs/android-termux.md).
+
 **iPhone / iPad**: install [a-Shell](https://holzschu.github.io/a-Shell_iOS/), then:
 
 ```bash
