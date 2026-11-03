@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Environment
+.venv/
+.cache/
+
+# Your login, your settings and what keepgram remembers - never commit these.
+# data/keepgram.session is a full login to your Telegram account.
+config.json
+data/
+
+# IDEs and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

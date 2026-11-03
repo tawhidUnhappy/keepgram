@@ -1,0 +1,34 @@
+{
+  "api_id": 0,
+  "api_hash": "",
+  "premium": "auto",
+  "include_admin_chats": false,
+  "thumbnails": "logo",
+  "folders": {
+    "name": "Keepgram",
+    "sorter": "one_series",
+    "size": 0
+  },
+  "secure": {
+    "finders": ["forwarded", "post_link"],
+    "skip_own_sources": true,
+    "replace": false,
+    "source_note": true,
+    "local_copy_dir": ""
+  },
+  "watch": {
+    "folders": true,
+    "keep_new": true,
+    "every_minutes": 10
+  },
+  "bot": {
+    "token": "",
+    "allowed_users": [],
+    "max_jobs": 2
+  },
+  "upload": {
+    "as_files": true,
+    "skip_hidden": true,
+    "part_mb": 0
+  }
+}
