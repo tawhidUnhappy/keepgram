@@ -8,7 +8,7 @@ import unittest
 from keepgram import paths
 from keepgram.ui.app import KeepgramApp
 from keepgram.ui.dialogs import Choice
-from keepgram.ui.screens import HomeScreen, SettingsScreen
+from keepgram.ui.screens import HOME, HomeScreen, SettingsScreen
 
 
 class Menus(unittest.TestCase):
@@ -31,7 +31,7 @@ class Menus(unittest.TestCase):
                     await pilot.pause(0.2)
                 self.assertIsInstance(app.screen, HomeScreen)
 
-                home.highlighted = 7  # Settings
+                home.highlighted = [key for key, _, _ in HOME].index("settings")
                 await pilot.press("enter")
                 await pilot.pause(0.2)
                 self.assertIsInstance(app.screen, SettingsScreen)

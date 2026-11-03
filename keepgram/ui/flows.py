@@ -252,6 +252,67 @@ async def secure_flow(app, only: int | None = None) -> None:
         state.close()
 
 
+async def tidy_flow(app) -> None:
+    title = "Delete forwards I have copies of"
+    client = await ensure_client(app)
+    cfg = app.cfg
+    state = State()
+    try:
+        async def check(t):
+            t.step("finding your chats ...")
+            owned = await chats.owned_chats(client, cfg["include_admin_chats"])
+
+            def progress(result):
+                t.step(f"reading {len(owned)} chat(s): {result.messages} messages")
+
+            # Records the copies made on another device too, so their forwards count.
+            result = await secure.scan(client, owned, {c.id for c in owned}, cfg, state, progress=progress,
+                                       cancelled=t.cancelled)
+            if t.cancelled():
+                return None
+            plan, notes = await secure.tidy_plan(client, owned, state,
+                                                 progress=lambda c: t.step(f"checking the copies in {c.title} ..."))
+            waiting = sum(len(j.own) for j in result.jobs if j.dep.finder == "forwarded")
+            return plan, notes, waiting
+
+        out = await task(app, title, "Checking each forward against its copy", check)
+        if await failed(app, title, out) or out.value is None:
+            return
+        plan, notes, waiting = out.value
+        count = sum(len(t.forwards) for t in plan)
+        later = (f"\n\n{waiting} forward(s) have no copy yet - Make every file my own copies them first; "
+                 "they're not deleted." if waiting else "")
+        listed = "\n".join(f"• {n}" for n in notes[:10])
+        if len(notes) > 10:
+            listed += f"\n• ... and {len(notes) - 10} more"
+        if not count:
+            await app.push_screen_wait(Result(title, f"No forward has a checked copy to delete.{later}\n\n{listed}"
+                                              .strip()))
+            return
+        where = "\n".join(f"• {t.chat.title}: {len(t.forwards)}" for t in plan[:10])
+        note = (f"{where}\n\nEach one's copy was read again just now: still in the chat, same file and caption. "
+                f"Deleting can't be undone.{later}\n\n{listed}").strip()
+        pick = await app.push_screen_wait(Choice(f"{count} forward(s) have their own copy", note,
+                                                 [("go", f"Delete all {count} forward(s)"), ("no", "Not now")],
+                                                 default="no"))
+        if pick != "go":
+            return
+
+        async def delete(t):
+            return await secure.tidy(client, plan, state, report=lambda n, total: t.step(f"deleted {n} of {total}"),
+                                     cancelled=t.cancelled)
+
+        out = await task(app, title, f"Deleting {count} forward(s)", delete)
+        if await failed(app, title, out):
+            return
+        text = f"Deleted {out.value} of {count} forward(s). Their copies stay."
+        if out.stopped:
+            text += "\nStopped - run it again to delete the rest."
+        await app.push_screen_wait(Result(title, text))
+    finally:
+        state.close()
+
+
 # -- upload ------------------------------------------------------------------------
 
 

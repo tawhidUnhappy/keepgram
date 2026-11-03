@@ -6,6 +6,12 @@ posted again as your own upload.
     run()   for each job: download, upload as your own (same kind of message,
             caption and formatting kept), check the copy, record it - and
             only then, if secure.replace is on, delete the forward
+    tidy_plan() / tidy()
+            later: delete the forwards that already have their own copy
+
+What is done is read from the chats themselves, not only from data/state.db:
+a copy already posted after its forward (by keepgram on another device, or
+before the records were lost) is recorded, never copied again.
 
 A job is never half done: if the upload or the check fails, nothing is
 recorded or deleted and the next run tries again. Copies are sent silently
@@ -87,9 +93,11 @@ def is_keepgram_copy(msg) -> bool:
 
 async def _collect(ctx, finders, chat, messages, state, limit, out: ScanResult, progress, cancelled) -> None:
     last: Job | None = None
+    start = len(out.jobs)
+    mine: dict = {}  # posts of yours with a file, by size: copies made before, maybe on another device
     async for msg in messages:
         if cancelled and cancelled():
-            return
+            break
         out.messages += 1
         if progress and out.messages % 100 == 0:
             progress(out)
@@ -97,6 +105,8 @@ async def _collect(ctx, finders, chat, messages, state, limit, out: ScanResult, 
         # forwards included - those are exactly what this is for.
         if isinstance(msg, types.MessageService):
             continue
+        if msg.out and msg.fwd_from is None and has_file(msg) and not state.is_copy(chat.id, msg.id):
+            mine.setdefault(_size_key(msg), []).append(msg)
         if state.is_kept(chat.id, msg.id) or state.is_copy(chat.id, msg.id) or is_keepgram_copy(msg):
             continue
         dep = None
@@ -129,6 +139,26 @@ async def _collect(ctx, finders, chat, messages, state, limit, out: ScanResult, 
             continue
         last = Job(chat, [msg], dep)
         out.jobs.append(last)
+    used: set[int] = set()
+    out.jobs[start:] = [job for job in out.jobs[start:] if not _already_copied(job, mine, used, state)]
+
+
+def _already_copied(job: Job, mine: dict, used: set[int], state: State) -> bool:
+    """Look among your later posts in the chat for this job's copies, and record
+    those found. True if every file of the job has its copy; otherwise the job
+    is cut down to the files still missing. Each post stands for one file."""
+    found: dict[int, object] = {}
+    for i, f in enumerate(job.dep.files):
+        for m in mine.get(_size_key(f), []):
+            if m.id > job.own[0].id and m.id not in used and same_file(f, m):
+                found[i] = m
+                used.add(m.id)
+                break
+    return bool(found) and _record_found(job, found, state)
+
+
+def _size_key(msg):
+    return msg.media.document.size if isinstance(msg.media, types.MessageMediaDocument) else "photo"
 
 
 def describe(result: ScanResult) -> str:
@@ -306,12 +336,18 @@ async def _recover(client, job: Job, since: float, state: State) -> bool:
         if m.fwd_from or not has_file(m) or not is_keepgram_copy(m) or state.is_copy(job.chat.id, m.id):
             continue
         for i, f in enumerate(job.dep.files):
-            if i not in found and m.id not in used and _same_file(f, m):
+            if i not in found and m.id not in used and same_file(f, m):
                 found[i] = m
                 used.add(m.id)
                 break
     if not found:
         return False
+    return _record_found(job, found, state)
+
+
+def _record_found(job: Job, found: dict, state: State) -> bool:
+    """found: file index -> its copy in the chat. Record them; True if that's
+    every file of the job, otherwise cut the job down to the missing ones."""
     aligned = len(job.own) == len(job.dep.files)  # a forwarded album: own[i] is files[i]
     for i, copy in found.items():
         own_id = job.own[i].id if aligned else -copy.id
@@ -329,15 +365,84 @@ async def _recover(client, job: Job, since: float, state: State) -> bool:
     return False
 
 
-def _same_file(original, copy) -> bool:
+def same_file(original, copy, recorded: bool = False) -> bool:
+    """Is `copy`, a post of yours, the same file as `original` with its caption?
+    A file must have the same name, size and type: a copy is the very bytes.
+    A photo is encoded again on upload, so it must have the same dimensions
+    and, unless keepgram recorded it as the copy, carry keepgram's note with
+    the original's date."""
+    if copy.fwd_from is not None or not has_file(copy):
+        return False
     if not (copy.message or "").startswith(original.message or ""):
         return False
     a, b = original.media, copy.media
-    if isinstance(a, types.MessageMediaPhoto) and isinstance(b, types.MessageMediaPhoto):
-        return True
     if isinstance(a, types.MessageMediaDocument) and isinstance(b, types.MessageMediaDocument):
-        return a.document.size == b.document.size and file_name(original) == file_name(copy)
+        return (a.document.size == b.document.size and a.document.mime_type == b.document.mime_type
+                and file_name(original) == file_name(copy))
+    if isinstance(a, types.MessageMediaPhoto) and isinstance(b, types.MessageMediaPhoto):
+        noted = is_keepgram_copy(copy) and f" · {original.date:%Y-%m-%d}" in copy.message
+        return (recorded or noted) and _dims(a.photo) == _dims(b.photo)
     return False
+
+
+def _dims(photo) -> tuple[int, int]:
+    return max(((s.w, s.h) for s in photo.sizes if hasattr(s, "w")), key=lambda d: d[0] * d[1], default=(0, 0))
+
+
+# -- tidy: delete forwards that have their own copy ---------------------------
+
+
+@dataclass
+class Tidy:
+    chat: OwnedChat
+    forwards: list[int]  # message ids, each with its copy checked just now
+
+
+async def tidy_plan(client, chats: list[OwnedChat], state: State, progress=None) -> tuple[list[Tidy], list[str]]:
+    """The forwards that are safe to delete: each one and its copy read again
+    from the chat - the forward still there, the copy still there and the same
+    file. A copy that's gone is forgotten, so the next copy run makes it again.
+    Run scan() first: it records copies made elsewhere."""
+    plan, notes = [], []
+    for chat in chats:
+        if progress:
+            progress(chat)
+        pairs = state.kept_forwards(chat.id)
+        ok = []
+        for at in range(0, len(pairs), 50):
+            batch = pairs[at:at + 50]
+            got = await client.get_messages(chat.entity, ids=[i for pair in batch for i in pair])
+            got = {m.id: m for m in got if m is not None}
+            for own_id, copy_id in batch:
+                own, copy = got.get(own_id), got.get(copy_id)
+                if own is None or own.fwd_from is None:
+                    state.mark_removed(chat.id, own_id)  # already deleted
+                elif copy is None or not same_file(own, copy, recorded=True):
+                    state.forget(chat.id, own_id)
+                    notes.append(f"{chat.title} #{own_id}: its copy is gone - kept, and copied again next time")
+                else:
+                    ok.append(own_id)
+        if ok:
+            plan.append(Tidy(chat, ok))
+    return plan, notes
+
+
+async def tidy(client, plan: list[Tidy], state: State, report=None, cancelled=None) -> int:
+    """Delete the planned forwards, 100 at a time; report(done, total) after
+    each batch. Returns how many were deleted."""
+    total, done = sum(len(t.forwards) for t in plan), 0
+    for t in plan:
+        for at in range(0, len(t.forwards), 100):
+            if cancelled and cancelled():
+                return done
+            batch = t.forwards[at:at + 100]
+            await client.delete_messages(t.chat.entity, batch)
+            for msg_id in batch:
+                state.mark_removed(t.chat.id, msg_id)
+            done += len(batch)
+            if report:
+                report(done, total)
+    return done
 
 
 def clean_tmp(older_than: float = 6 * 3600) -> None:

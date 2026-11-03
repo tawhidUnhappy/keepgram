@@ -18,6 +18,7 @@ tapping.
 - [8. Log in to Telegram](#8-log-in-to-telegram)
 - [Using the menus on a phone](#using-the-menus-on-a-phone)
 - [Uploading folders from your phone](#uploading-folders-from-your-phone)
+- [Carrying on from your computer](#carrying-on-from-your-computer)
 - [Keep it running when the screen is off](#keep-it-running-when-the-screen-is-off)
 - [Updating keepgram](#updating-keepgram)
 - [Removing keepgram](#removing-keepgram)
@@ -202,6 +203,18 @@ no extra space on your phone.
 **Keep your copies on the phone too (optional).** Settings → `secure.local_copy_dir` keeps a copy of
 every file keepgram makes your own in a folder, for example
 `/storage/emulated/0/keepgram-copies`. Make sure your phone has room for them.
+
+## Carrying on from your computer
+
+Started **Make every file my own** on your computer? Log in on the phone with the same account
+and choose it again. keepgram looks in your chats for the copies already made and copies only what
+is left. Nothing is copied twice. Folder uploads do the same: files already in the chat are
+skipped.
+
+Run keepgram on one device at a time: close it on the computer before you start it on the phone.
+
+To delete the forwards that now have their own copy, choose **Delete forwards I have copies of**.
+It checks every copy again first, shows how many forwards it will delete, and asks before deleting.
 
 ## Keep it running when the screen is off
 

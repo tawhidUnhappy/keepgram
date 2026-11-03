@@ -50,13 +50,9 @@ class Resume(unittest.TestCase):
         self.assertEqual(len(self.client.sent), 1)
         self.state.mark_kept = real
 
-        jobs = self.scan()  # next run: the forward still looks un-copied ...
-        self.assertEqual(len(jobs), 1)
-        done, problems = run(secure.run(self.client, jobs, self.cfg, self.state))
-        self.assertEqual((done, problems), (1, []))
-        self.assertEqual(len(self.client.sent), 1)  # ... but its copy is found, not posted again
+        self.assertEqual(self.scan(), [])  # next run: its copy is found in the chat and recorded ...
+        self.assertEqual(len(self.client.sent), 1)  # ... not posted again
         self.assertTrue(self.state.is_kept(MINE, 1))
-        self.assertEqual(self.scan(), [])  # and nothing is left to do
 
     def test_cut_off_halfway_through_a_job_of_several_files(self):
         # a forwarded "album" of a photo and a zip can't go as one album: two separate posts

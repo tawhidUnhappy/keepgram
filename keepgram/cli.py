@@ -126,6 +126,36 @@ async def cmd_secure(args, cfg):
         print("Run secure again to retry the ones that failed.")
 
 
+async def cmd_tidy(args, cfg):
+    state = State()
+    client = await telegram.connect(cfg)
+    try:
+        owned = await chats.owned_chats(client, cfg["include_admin_chats"])
+        picked = chats.pick(owned, args.chat) if args.chat else owned
+        if not picked:
+            raise SystemExit(f"none of your chats matches {args.chat!r} - see: chats")
+        result = await secure.scan(client, picked, {c.id for c in owned}, cfg, state)
+        plan, notes = await secure.tidy_plan(client, picked, state)
+        for note in notes:
+            print("  note:", note)
+        waiting = sum(len(j.own) for j in result.jobs if j.dep.finder == "forwarded")
+        if waiting:
+            print(f"{waiting} forward(s) have no copy yet - run secure first; they're not deleted.")
+        count = sum(len(t.forwards) for t in plan)
+        if not count:
+            print("No forward has a checked copy to delete.")
+            return
+        for t in plan:
+            print(f"  {t.chat.title}: {len(t.forwards)} forward(s)")
+        if args.dry_run or not confirm(f"Delete {count} forward(s)? Their copies stay.", args.yes):
+            return
+        done = await secure.tidy(client, plan, state)
+    finally:
+        await client.disconnect()
+        state.close()
+    print(f"Deleted {done} of {count} forward(s).")
+
+
 # -- upload --------------------------------------------------------------------
 
 
@@ -276,6 +306,11 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true", help="show what would be copied, change nothing")
     p.add_argument("-y", "--yes", action="store_true", help="don't ask before copying")
 
+    p = sub.add_parser("tidy", help="delete the forwards whose own copy is in the chat (checked first)")
+    p.add_argument("--chat", help="only this chat (id or title)")
+    p.add_argument("--dry-run", action="store_true", help="show what would be deleted, change nothing")
+    p.add_argument("-y", "--yes", action="store_true", help="don't ask before deleting")
+
     p = sub.add_parser("all", help="folders, then secure")
     p.add_argument("--replace", action="store_true")
     p.add_argument("--dry-run", action="store_true")
@@ -329,7 +364,7 @@ async def cmd_all(args, cfg):
     await cmd_secure(args, cfg)
 
 
-ASYNC = {"login": cmd_login, "chats": cmd_chats, "folders": cmd_folders, "secure": cmd_secure,
+ASYNC = {"login": cmd_login, "chats": cmd_chats, "folders": cmd_folders, "secure": cmd_secure, "tidy": cmd_tidy,
          "all": cmd_all, "upload": cmd_upload, "bot": cmd_bot, "watch": cmd_watch}
 SYNC = {"join": cmd_join, "status": cmd_status, "plugins": cmd_plugins}
 

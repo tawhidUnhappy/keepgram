@@ -107,6 +107,7 @@ now**), so a stray Enter never starts a job.
 | **My channels and groups** | Every chat you created. Choose one to make its files your own, or to upload a folder into it. |
 | **Sort them into folders** | Shows the folder plan, and changes your folders only after you say yes. |
 | **Make every file my own** | Reads your chats, shows what depends on someone else (file count and size), then copies it after you say yes. |
+| **Delete forwards I have copies of** | Reads your chats, checks each forward's copy again (still there, same file and caption), shows how many forwards can go, and deletes them after you say yes. Forwards without a copy are left alone. |
 | **Upload a folder** | Type the folder's path and choose where it goes: a private channel for it, Saved Messages, or one of your chats. If some files are already there, you choose to skip them or upload them again. |
 | **Join downloaded parts** | Turns `.001`, `.002`, ... back into the file. |
 | **Run the bot** | Runs the bot while that screen stays open. |
@@ -132,6 +133,7 @@ stopped.
 ./run.sh folders                 # sort them into Keepgram 1, Keepgram 2, ...
 ./run.sh secure                  # copy what depends on others as your own
 ./run.sh secure --chat "My stash" --dry-run
+./run.sh tidy                    # delete the forwards that have their own copy
 ./run.sh all                     # folders, then secure
 ./run.sh upload ~/Photos         # a folder into a new private channel
 ./run.sh upload ~/Photos --to me # ... or into Saved Messages, @a_channel, a chat id or title
@@ -143,7 +145,8 @@ stopped.
 
 Every command that changes something shows what it will do first and asks before doing it.
 `--dry-run` only shows, and `-y` doesn't ask. Every command can be run again: keepgram remembers
-what it has done (in `data/state.db`) and continues from there.
+what it has done (in `data/state.db`) and continues from there, and also reads it from your chats,
+so it can [carry on from another device](#carry-on-from-another-device).
 
 ### folders
 
@@ -168,6 +171,10 @@ what it has done (in `data/state.db`) and continues from there.
 - Copies are sent silently, so members don't get a notification for each one.
 - `--replace` (or `secure.replace`) deletes the forward once its copy is posted and checked. For a
   link, the message is only deleted if it contained nothing but the link.
+- Copied with replace off, and want the forwards gone now? `./run.sh tidy` (in the menus:
+  **Delete forwards I have copies of**) reads each forward and its copy again, and deletes only
+  the forwards whose copy is still in the chat as the same file. A forward whose copy has
+  disappeared stays, and the next `secure` copies it again.
 - Forwards from your own chats are skipped (`secure.skip_own_sources`).
 - Posts in chats whose owner turned on **Restrict saving content** are not copied. keepgram lists
   them in the report.
@@ -326,6 +333,27 @@ Nothing is lost, nothing is made twice, and no broken file is left behind:
 
 Checked for real: keepgram was killed (`kill -9`) 20% into copying a 57 MB file and run again.
 The chat ended up with exactly one copy, identical to the original by SHA-256.
+
+### Carry on from another device
+
+Start a job on your computer and finish it on your phone (or the other way round). Nothing is
+copied twice, even though each device has its own `data/state.db`:
+
+- **Make every file my own** looks in the chat itself. A forward with a copy of yours posted after
+  it (the same file name, size and type, and the same caption) is recorded as done and skipped.
+  For a photo, which Telegram encodes again on upload, it also needs keepgram's
+  `↪ kept from` note with the same date, and the same picture size. Without the note, a photo is
+  copied again rather than risk a wrong match.
+- **Upload a folder** skips files already in the chat (same name and size).
+- **Keep working while I use Telegram** starts from the newest message on a new device, so it
+  never starts on old files.
+
+Run one device at a time: two devices copying the same chat at the same moment don't see each
+other's work in progress.
+
+Checked for real on 44 channels (7,982 messages): reading them with an empty `state.db`, as a new
+phone would, left exactly the same 694 forwards to copy as the computer's own records, and found
+all 378 copies already made.
 
 ## Settings
 

@@ -118,6 +118,17 @@ class State:
         with self.db:
             self.db.execute("UPDATE kept SET removed=1 WHERE chat_id=? AND msg_id=?", (chat_id, msg_id))
 
+    def forget(self, chat_id: int, msg_id: int) -> None:
+        """Its copy is gone: copy it again next time."""
+        with self.db:
+            self.db.execute("DELETE FROM kept WHERE chat_id=? AND msg_id=?", (chat_id, msg_id))
+
+    def kept_forwards(self, chat_id: int) -> list[tuple[int, int]]:
+        """(forward, its copy) for each copied forward that is still there."""
+        return self.db.execute(
+            "SELECT msg_id, new_msg_id FROM kept WHERE chat_id=? AND finder='forwarded' AND removed=0 AND msg_id>0 "
+            "ORDER BY msg_id", (chat_id,)).fetchall()
+
     # -- claims (one copy at a time, across processes) ---------------------
     CLAIM_STALE = 6 * 3600  # a claim this old belongs to a keepgram that died
 

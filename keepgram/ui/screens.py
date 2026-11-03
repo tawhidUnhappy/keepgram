@@ -17,6 +17,7 @@ HOME = [
     ("chats", "My channels and groups", "every chat you created - pick one to work on it"),
     ("folders", "Sort them into folders", 'Keepgram 1, Keepgram 2, ... - a new one when one is full'),
     ("secure", "Make every file my own", "re-upload files that depend on someone else's post"),
+    ("tidy", "Delete forwards I have copies of", "each forward goes once its own copy is checked"),
     ("upload", "Upload a folder", "every file in a folder from this computer, big ones in parts"),
     ("watch", "Keep working while I use Telegram", "new chats into folders, new forwards copied - until you stop it"),
     ("join", "Join downloaded parts", "name.mkv.001, .002, ... back into the file"),
@@ -62,6 +63,8 @@ class HomeScreen(Screen):
             app.start_flow(flows.folders_flow(app))
         elif key == "secure":
             app.start_flow(flows.secure_flow(app))
+        elif key == "tidy":
+            app.start_flow(flows.tidy_flow(app))
         elif key == "upload":
             app.start_flow(flows.upload_flow(app))
         elif key == "join":
