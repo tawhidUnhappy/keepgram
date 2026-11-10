@@ -54,6 +54,7 @@ class FakeClient:
         self._next_msg = 10_000
         self.parts: dict[int, dict[int, bytes]] = {}  # file_id -> piece number -> bytes (piece by piece uploads)
         self.part_calls = 0
+        self.stored: dict[int, bytes] = {}  # document id -> the bytes it was uploaded with
 
     # -- reading --
     async def get_me(self):
@@ -119,7 +120,8 @@ class FakeClient:
         from telethon.tl import functions
 
         if isinstance(request, functions.upload.GetFileRequest):
-            data = self.content(self._document(request.location.id))
+            doc = self._document(request.location.id)
+            data = self.stored[doc.id] if doc.id in self.stored else self.content(doc)
             piece = data[request.offset:request.offset + request.limit]
             return types.upload.File(types.storage.FileUnknown(), 0, piece)
         if isinstance(request, (functions.upload.SaveFilePartRequest, functions.upload.SaveBigFilePartRequest)):
@@ -151,6 +153,7 @@ class FakeClient:
             name = next(a.file_name for a in media.attributes if isinstance(a, types.DocumentAttributeFilename))
             out_media = doc_media(self._next_msg, len(data), name, media.mime_type,
                                   [a for a in media.attributes if not isinstance(a, types.DocumentAttributeFilename)])
+            self.stored[self._next_msg] = data
         msg = message(chat_id, self._next_msg, caption, media=out_media, date=dt.datetime.now(dt.timezone.utc))
         self.chats.setdefault(chat_id, []).append(msg)
         self.sent.append((msg, media))

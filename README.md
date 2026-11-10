@@ -137,6 +137,7 @@ stopped.
 ./run.sh all                     # folders, then secure
 ./run.sh upload ~/Photos         # a folder into a new private channel
 ./run.sh upload ~/Photos --to me # ... or into Saved Messages, @a_channel, a chat id or title
+./run.sh verify ~/Photos --to me      # read every file back from the chat: identical to the disk?
 ./run.sh join ~/Downloads/movie.mkv.001
 ./run.sh bot                     # run the bot (see below)
 ./run.sh status
@@ -203,6 +204,28 @@ so it can [carry on from another device](#carry-on-from-another-device).
   and parts that are already up are skipped.
 - Hidden files (starting with `.`) are skipped (`upload.skip_hidden`). So are empty files, because
   Telegram can't store a 0-byte file.
+
+### verify
+
+```bash
+./run.sh verify ~/Photos --to "My stash"    # --to: where it went; left out, where it went from this device
+./run.sh verify ~/Photos --to "My stash" --fix
+```
+
+Proves an uploaded folder is in the chat **byte for byte**, not just by name and size:
+
+- For every file - every part, for a file sent in parts - it finds the message holding it: the one
+  keepgram recorded when it sent it, else any file in the chat with the same name and size (so it
+  works for a folder uploaded from another device too).
+- It downloads that file again, piece by piece, straight into SHA-256 - nothing is written to disk -
+  and compares it with the SHA-256 of the same bytes on disk, read fresh (not from keepgram's hash
+  cache). A file counts as there only when the two are equal; one changed bit anywhere fails it.
+- The last line says `All identical: ...` when every file is there, and the command fails (exit
+  status 1) with the list of what is missing or different otherwise.
+- `--fix` sends again whatever is missing or different, checks each new copy the same way, and only
+  then deletes a copy that was different. Without `--fix` nothing in the chat is changed.
+
+It reads back the whole folder, so it takes about as long as downloading it.
 
 ### join
 
@@ -404,6 +427,7 @@ keepgram/
   watch.py      the watcher: runs in its window until that's closed
   limits.py     Telegram's limits for this account, learned on connecting
   upload.py     walking a folder, parts, duplicates, sending
+  verify.py     every uploaded file read back from the chat and compared, byte for byte
   join.py       parts back into files
   media.py      file kinds, uploads that keep their attributes, FileSlice, progress
   state.py      what has been done (SQLite)

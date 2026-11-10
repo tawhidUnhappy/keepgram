@@ -10,7 +10,7 @@ from pathlib import Path
 
 from telethon import utils
 
-from keepgram import __version__, chats, config, folders, join, limits, paths, plugins, secure, telegram, upload
+from keepgram import __version__, chats, config, folders, join, limits, paths, plugins, secure, telegram, upload, verify
 from keepgram.media import human
 from keepgram.state import State
 
@@ -248,6 +248,57 @@ async def cmd_upload(args, cfg):
         print("Run the same upload again to send what failed - the rest is skipped.")
 
 
+# -- verify --------------------------------------------------------------------
+
+
+async def _upload_target(client, cfg, state: State, root: Path, to: str | None):
+    """The chat a folder went to: --to, else where it went last time."""
+    owned = await chats.owned_chats(client, cfg["include_admin_chats"])  # also loads every chat you're in
+    if to:
+        return await upload.resolve_target(client, to, owned)
+    saved = state.target_for(str(root))
+    if saved is not None:
+        try:
+            return await client.get_entity(saved)
+        except (ValueError, TypeError):
+            pass
+    raise SystemExit("Which chat? This folder wasn't uploaded from this device - name the chat with --to.")
+
+
+async def cmd_verify(args, cfg):
+    from keepgram import transfer
+
+    root = Path(args.folder).expanduser().resolve()
+    if not root.is_dir():
+        raise SystemExit(f"{root} is not a folder")
+    plan = upload.walk(root, cfg["upload"].get("skip_hidden", True))
+    if not plan.items:
+        raise SystemExit("No files in that folder.")
+    state = State()
+    client = await telegram.connect(cfg)
+    try:
+        entity = await _upload_target(client, cfg, state, root, args.to)
+        chat_id, where = utils.get_peer_id(entity), utils.get_display_name(entity)
+        checks = verify.plan_checks(plan, cfg, state)
+        total = sum(c.piece.length for c in checks)
+        print(f"{len(checks)} file(s)/part(s), {human(total)}: each read back from {where} and compared, byte for byte")
+        await verify.check_all(client, entity, chat_id, checks, state)
+        if args.fix:
+            await verify.fix(client, entity, chat_id, plan, checks, cfg, state)
+    finally:
+        await transfer.close(client)
+        await client.disconnect()
+        state.close()
+    bad = [c for c in checks if not c.ok]
+    for c in bad:
+        how = f"a different copy (message {', '.join(map(str, c.bad))})" if c.bad else "missing"
+        print(f"  not in the chat as on disk: {c.piece.name} - {how}")
+    if bad:
+        raise SystemExit(f"{len(bad)} of {len(checks)} file(s)/part(s) are missing or different in {where}."
+                         + ("" if args.fix else " `verify --fix` sends them again."))
+    print(f"{verify.ALL_IDENTICAL} {len(checks)} file(s)/part(s) in {where}, {human(total)} read back (SHA-256).")
+
+
 # -- join / status / plugins ---------------------------------------------------
 
 
@@ -325,6 +376,14 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("-y", "--yes", action="store_true")
 
+    p = sub.add_parser("verify", help="read every file of an uploaded folder back from the chat and compare it "
+                                      "with the disk, byte for byte (SHA-256)")
+    p.add_argument("folder")
+    p.add_argument("--to", help="the chat the folder was uploaded to; default: where it went from this device")
+    p.add_argument("--fix", action="store_true",
+                   help="send again whatever is missing or different, and delete a different copy once its "
+                        "replacement is proved")
+
     p = sub.add_parser("join", help="join name.ext.001, .002, ... back into the file")
     p.add_argument("path", help="the .001 file, or a folder to join every set in")
 
@@ -365,7 +424,7 @@ async def cmd_all(args, cfg):
 
 
 ASYNC = {"login": cmd_login, "chats": cmd_chats, "folders": cmd_folders, "secure": cmd_secure, "tidy": cmd_tidy,
-         "all": cmd_all, "upload": cmd_upload, "bot": cmd_bot, "watch": cmd_watch}
+         "all": cmd_all, "upload": cmd_upload, "verify": cmd_verify, "bot": cmd_bot, "watch": cmd_watch}
 SYNC = {"join": cmd_join, "status": cmd_status, "plugins": cmd_plugins}
 
 def main(argv: list[str] | None = None) -> None:
